@@ -22,6 +22,7 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "ssd1306.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -47,22 +48,26 @@ I2C_HandleTypeDef hi2c1;
 TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
-char outcomes[12][40] = {
+char outcomes[16][40] = {
 		"Outlook's not so good",
+    "Outlook's not great",
 		"You're pretty much screwed",
 		"Nope",
 		"Sorry.",
 		"I mean who knows?",
 		"Why would I know that?",
-		"This is proven undecidable.",
-		"Left as exercise to reader",
+		"This is proven to be undecidable.",
+		"Left as exercise to the reader",
 		"This is so doable",
 		"You got it mate",
 		"110%",
-		"Good enough for Australia"
+		"Good  enough for Australia",
+    "Easy peasy line's busy, call later",
+    "You're a genius",
+    "I can legally guarantee success"
 };
 
-int out_length = 12;
+int out_length = 16;
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -134,11 +139,6 @@ int main(void)
       /* Calibration Error */
 //      Error_Handler();
     }
-    srand(rng());
-
-    // Init outcome
-    int out_number = rand() % out_length;
-    const char* my_outcome = outcomes[out_number];
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -146,21 +146,113 @@ int main(void)
   while (1)
   {
 	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-	  HAL_Delay(50);
+	  HAL_Delay(10);
 	  TIM2->CCR1 = 0;
 	  HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
-	  HAL_Delay(50);
+	  HAL_Delay(10);
 	  TIM2->CCR1 = 400;
 
 	  if (is_screen_connected()) {
 		  ssd1306_Init();
-		  ssd1306_Fill(Black);
-		  ssd1306_SetCursor(30, 46);
-		  ssd1306_WriteString("ERROR", Font_11x18, White);
-		  ssd1306_UpdateScreen();
+		  // ssd1306_Fill(Black);
+		  // ssd1306_SetCursor(30, 46);
+		  // ssd1306_WriteString("ERROR", Font_11x18, White);
+		  // ssd1306_UpdateScreen();
+    }
 
-		  HAL_Delay(200);
+    uint32_t all_data = 0;
+    for (int datum = 0; datum < 20; datum++) {
+      int raw = rng();
+      if (is_screen_connected()) {
+          // Show data acquisition screen
+          ssd1306_Fill(Black);
+          ssd1306_SetCursor(0, 0);
+          ssd1306_WriteString("Acquiring", Font_11x18, White);
+          ssd1306_SetCursor(0, 20);
+          ssd1306_WriteString("Data...", Font_11x18, White);
+
+          char buffer[10];
+          snprintf(buffer, 10, "%d", raw);
+          ssd1306_SetCursor(20, 40);
+          ssd1306_WriteString(buffer, Font_7x10, White);
+
+          ssd1306_UpdateScreen();
+      }
+      all_data += raw;
+      HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+    }
+    HAL_GPIO_WritePin(LED_GPIO_Port, LED_Pin, GPIO_PIN_RESET);
+
+    srand(rng());
+
+    // Init outcome
+    int out_number = rand() % out_length;
+    const char* my_outcome = outcomes[out_number];
+
+    if (is_screen_connected()) {
+      ssd1306_Fill(Black);
+
+      // Display the out_number string by splitting it into max two lines
+      const int max_length = 17;
+      int border_size = 10;
+
+      int length = strlen(my_outcome);
+      char line1[max_length+1];
+      char line2[max_length+1];
+      if (length > max_length) {
+        strncpy(line1, my_outcome, max_length);
+        line1[max_length] = '\0';
+        strncpy(line2, my_outcome+max_length, length-max_length);
+        line2[length-max_length] = '\0';
+
+        // Print text at center of screen
+        int length1 = strlen(line1);
+        int length2 = strlen(line2);
+        ssd1306_SetCursor((128-length1*7)/2, 24);
+        ssd1306_WriteString(line1, Font_7x10, White);
+        ssd1306_SetCursor((128-length2*7)/2, 36);
+        ssd1306_WriteString(line2, Font_7x10, White);
+
+        border_size = 15;
+      } else {
+        strncpy(line1, my_outcome, length);
+        line1[length] = '\0';
+        line2[0] = '\0';
+
+        // Print text at center of screen
+        int length1 = strlen(line1);
+        if (length1 < 7) {
+          ssd1306_SetCursor((128-length1*11)/2, 25);
+          ssd1306_WriteString(line1, Font_11x18, White);
+          border_size = 35;
+        } else {
+          ssd1306_SetCursor((128-length1*7)/2, 27);
+          ssd1306_WriteString(line1, Font_7x10, White);
+          border_size = 25;
+        }
+
+      }
+
+      for (int i = 0; i < SSD1306_WIDTH; i++) {
+        for (int j = 0; j < SSD1306_HEIGHT; j++) {
+          if (i + j < border_size) {
+            ssd1306_DrawPixel(i, j, White);
+          }
+          if (i + j > SSD1306_HEIGHT + SSD1306_WIDTH - border_size) {
+            ssd1306_DrawPixel(i, j, White);
+          }
+          if (j - i > SSD1306_HEIGHT - border_size) {
+            ssd1306_DrawPixel(i, j, White);
+          }
+          if (i - j > SSD1306_WIDTH - border_size) {
+            ssd1306_DrawPixel(i, j, White);
+          }
+        }
+      }
 	  }
+
+    ssd1306_UpdateScreen();
+    HAL_Delay(2000);
 
 
 //	  if (fabs((float)raw - (float)old_raw) > 100) {
@@ -245,7 +337,7 @@ static void MX_ADC1_Init(void)
   hadc1.Init.LowPowerAutoWait = DISABLE;
   hadc1.Init.LowPowerAutoPowerOff = DISABLE;
   hadc1.Init.ContinuousConvMode = DISABLE;
-  hadc1.Init.NbrOfConversion = 2;
+  hadc1.Init.NbrOfConversion = 3;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
   hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
   hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
@@ -278,6 +370,15 @@ static void MX_ADC1_Init(void)
   {
     Error_Handler();
   }
+
+  /** Configure Regular Channel
+  */
+  sConfig.Channel = ADC_CHANNEL_TEMPSENSOR;
+  sConfig.Rank = ADC_REGULAR_RANK_3;
+  if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
   /* USER CODE BEGIN ADC1_Init 2 */
 
   /* USER CODE END ADC1_Init 2 */
@@ -300,7 +401,7 @@ static void MX_I2C1_Init(void)
 
   /* USER CODE END I2C1_Init 1 */
   hi2c1.Instance = I2C1;
-  hi2c1.Init.Timing = 0x00303D5B;
+  hi2c1.Init.Timing = 0x00000107;
   hi2c1.Init.OwnAddress1 = 0;
   hi2c1.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
   hi2c1.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
@@ -326,6 +427,10 @@ static void MX_I2C1_Init(void)
   {
     Error_Handler();
   }
+
+  /** I2C Fast mode Plus enable
+  */
+  HAL_I2CEx_EnableFastModePlus(I2C_FASTMODEPLUS_I2C1);
   /* USER CODE BEGIN I2C1_Init 2 */
 
   /* USER CODE END I2C1_Init 2 */
@@ -395,8 +500,8 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_1 */
 
   /* GPIO Ports Clock Enable */
-  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOB_CLK_ENABLE();
+  __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
